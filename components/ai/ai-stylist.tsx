@@ -24,7 +24,7 @@ const initialMessages: ChatMessage[] = [
   {
     role: "assistant",
     content:
-      "Mình là DOTUS Stylist. Hãy nói dịp mặc, thời tiết, ngân sách hoặc màu bạn thích, mình sẽ gợi ý set từ sản phẩm còn hàng trong shop.",
+      "Mình là DOTUS Stylist. Hãy nói dịp mặc, thời tiết, ngân sách hoặc màu bạn thích, mình sẽ gợi ý set theo tên sản phẩm, giá và tổng tiền.",
   },
 ];
 
@@ -226,7 +226,7 @@ export function AIStylist() {
               </Button>
             </div>
             <p className="mt-2 text-[11px] leading-4 text-neutral-500">
-              Gợi ý AI mang tính tham khảo. Kiểm tra size, tồn kho và giá tại trang sản phẩm trước khi đặt hàng.
+              Gợi ý AI mang tính tham khảo. Tìm sản phẩm theo tên và kiểm tra size, tồn kho trước khi đặt hàng.
             </p>
           </form>
         </section>

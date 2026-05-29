@@ -37,10 +37,6 @@ function formatCurrency(value: number) {
   }).format(value);
 }
 
-function productLink(product: StylistProduct, origin: string) {
-  return `${origin}/product/${product.slug ?? product.id}`;
-}
-
 function detectIntent(message: string) {
   const lower = message.toLowerCase();
 
@@ -71,7 +67,8 @@ function toPlainSearchText(value: string) {
   return value
     .toLowerCase()
     .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "");
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/đ/g, "d");
 }
 
 function parseBudget(message: string) {
@@ -87,6 +84,15 @@ function parseBudget(message: string) {
     Number(match[1].replace(",", ".")) *
     (match[2] === "triệu" || match[2] === "tr" ? 1000000 : 1000)
   );
+}
+
+function sanitizeAssistantAnswer(answer: string) {
+  return answer
+    .replace(/https?:\/\/\S+/gi, "")
+    .replace(/\s+-\s*$/gm, "")
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 }
 
 function parseBodyStats(message: string) {
@@ -121,9 +127,87 @@ function suggestTopSize(message: string) {
   return { size, height, weight, wantsOversize };
 }
 
+function productMatches(product: StylistProduct, patterns: RegExp[]) {
+  const text = `${product.name} ${product.category ?? ""} ${product.line ?? ""}`;
+  return patterns.some((pattern) => pattern.test(text));
+}
+
+function chooseOutfitProducts(message: string, products: StylistProduct[], budget: number | null) {
+  const lower = toPlainSearchText(message);
+  const wantsColdWeather = /(da lat|lanh|mua|se lanh|layer|hoodie)/i.test(lower);
+  const wantsSchool = /(di hoc|truong|lop|daily|hang ngay)/i.test(lower);
+  const wantsCafe = /(cafe|ca phe|hen ho|toi|di choi)/i.test(lower);
+
+  const groups: RegExp[][] = wantsColdWeather
+    ? [
+        [/hoodie|jacket/i],
+        [/tee|t-shirt|shirt/i],
+        [/pants|cargo|short|quan/i],
+        [/beanie|cap|bag|backpack/i],
+      ]
+    : wantsSchool
+      ? [
+          [/tee|t-shirt|shirt/i],
+          [/pants|cargo|short|quan/i],
+          [/sneaker|giay/i],
+          [/bag|backpack|cap/i],
+        ]
+      : wantsCafe
+        ? [
+            [/shirt|tee|t-shirt|hoodie/i],
+            [/pants|cargo|short|quan/i],
+            [/sneaker|giay/i],
+            [/bag|cap|beanie/i],
+          ]
+        : [
+            [/tee|t-shirt|shirt|hoodie/i],
+            [/pants|cargo|short|quan/i],
+            [/sneaker|giay/i],
+            [/bag|cap|beanie/i],
+          ];
+
+  const picked: StylistProduct[] = [];
+  let total = 0;
+
+  for (const group of groups) {
+    const candidates = products
+      .filter((product) => !picked.some((item) => item.id === product.id))
+      .filter((product) => productMatches(product, group))
+      .sort((a, b) => {
+        const aUnder = budget ? total + a.price <= budget : true;
+        const bUnder = budget ? total + b.price <= budget : true;
+        if (aUnder !== bUnder) return aUnder ? -1 : 1;
+        return a.price - b.price;
+      });
+
+    const candidate = candidates[0];
+    if (!candidate) continue;
+    if (budget && picked.length >= 2 && total + candidate.price > budget) continue;
+    picked.push(candidate);
+    total += candidate.price;
+    if (picked.length >= 4) break;
+  }
+
+  if (picked.length < 2) {
+    for (const product of products.sort((a, b) => a.price - b.price)) {
+      if (picked.some((item) => item.id === product.id)) continue;
+      if (budget && picked.length > 0 && total + product.price > budget) continue;
+      picked.push(product);
+      total += product.price;
+      if (picked.length >= 3) break;
+    }
+  }
+
+  return { picked, total, wantsColdWeather, wantsSchool, wantsCafe };
+}
+
 function pickRelevantProducts(message: string, products: StylistProduct[]) {
   const lower = toPlainSearchText(message);
   const budget = parseBudget(message);
+  const wantsSchool = /(di hoc|truong|lop|daily|hang ngay)/i.test(lower);
+  const wantsCafe = /(cafe|ca phe|toi|hen ho|di choi)/i.test(lower);
+  const wantsColdWeather = /(da lat|lanh|mua|se lanh|cuoi tuan)/i.test(lower);
+  const wantsMinimal = /(toi gian|basic|de phoi|lich su|gon)/i.test(lower);
   const keywords = lower
     .split(/[^a-z0-9]+/)
     .filter((word) => word.length >= 3);
@@ -140,7 +224,10 @@ function pickRelevantProducts(message: string, products: StylistProduct[]) {
       );
       const score =
         keywords.reduce((total, word) => total + (productText.includes(word) ? 2 : 0), 0) +
-        (/hoodie|da lat|lanh|mua|toi/.test(lower) && /hoodie/i.test(productText) ? 4 : 0) +
+        (wantsColdWeather && /hoodie|jacket|beanie/i.test(productText) ? 5 : 0) +
+        (wantsSchool && /tee|t-shirt|cargo|pants|sneaker|backpack/i.test(productText) ? 3 : 0) +
+        (wantsCafe && /shirt|tee|sneaker|bag|cap|beanie/i.test(productText) ? 3 : 0) +
+        (wantsMinimal && /basic|logo|neutral|grey|black|white|sand/i.test(productText) ? 3 : 0) +
         (/giay|sneaker/.test(lower) && /sneaker/i.test(productText) ? 4 : 0) +
         (/quan|cargo|pants|short/.test(lower) && /(pants|short|cargo)/i.test(productText) ? 4 : 0) +
         (/phu kien|mu|tui|cap|bag/.test(lower) && /(cap|bag|accessories)/i.test(productText) ? 4 : 0);
@@ -152,7 +239,7 @@ function pickRelevantProducts(message: string, products: StylistProduct[]) {
     .map((item) => item.product);
 }
 
-function toCatalogContext(products: StylistProduct[], origin: string) {
+function toCatalogContext(products: StylistProduct[]) {
   if (!products.length) {
     return "Hiện catalog chưa có sản phẩm active còn hàng. Hãy hỏi thêm nhu cầu và gợi ý khách quay lại sau.";
   }
@@ -166,7 +253,6 @@ function toCatalogContext(products: StylistProduct[], origin: string) {
         `dòng ${product.line ?? "chưa phân loại"}`,
         `giới tính ${product.gender ?? "unisex"}`,
         `tồn kho ${product.stock ?? 0}`,
-        `link ${productLink(product, origin)}`,
       ];
 
       if (product.description) {
@@ -178,17 +264,18 @@ function toCatalogContext(products: StylistProduct[], origin: string) {
     .join("\n");
 }
 
-function toStoreKnowledge(origin: string) {
+function toStoreKnowledge() {
   return [
     "Kiến thức vận hành DOTUS:",
-    `- Trang sản phẩm: ${origin}/products`,
-    `- Giỏ hàng và thanh toán: ${origin}/cart`,
-    `- Trang tài khoản/lịch sử đơn hàng: ${origin}/dashboard`,
+    "- Trang sản phẩm dùng để xem catalog, lọc sản phẩm và kiểm tra tồn kho.",
+    "- Giỏ hàng dùng để xem sản phẩm đã chọn, nhập thông tin nhận hàng và đặt đơn.",
+    "- Trang tài khoản/lịch sử đơn hàng dùng để xem trạng thái đơn và hóa đơn.",
     "- Khách chọn sản phẩm, chọn size, thêm vào giỏ, nhập tên người nhận, số điện thoại, địa chỉ, ghi chú và phương thức thanh toán.",
     "- Đơn mới ở trạng thái Chờ xử lý. Khi admin xác nhận thanh toán/COD, đơn sang Đã xác nhận và hệ thống mới trừ tồn kho.",
     "- Nếu đơn đã xác nhận nhưng bị hủy, tồn kho được hoàn lại theo logic xử lý đơn hàng.",
     "- Size áo hoodie/tee chọn theo chiều cao, cân nặng và form mong muốn; giày chọn theo size đang đi hoặc chiều dài bàn chân; phụ kiện thường free-size.",
     "- Chatbot không xem được đơn riêng tư và không xử lý mật khẩu, OTP, thông tin thẻ ngân hàng.",
+    "- Khi gợi ý outfit, không gửi đường link. Khách tự tìm sản phẩm theo tên trên website.",
   ].join("\n");
 }
 
@@ -234,7 +321,7 @@ function fallbackStylistAnswer(message: string, products: StylistProduct[], orig
   if (intent === "order") {
     return [
       "Bạn kiểm tra đơn theo 2 cách:",
-      `1. Đăng nhập rồi vào trang tài khoản: ${origin}/dashboard`,
+      "1. Đăng nhập rồi vào trang tài khoản/lịch sử đơn hàng.",
       "2. Nếu vừa đặt hàng, đơn sẽ bắt đầu ở trạng thái Chờ xử lý. Admin xác nhận xong thì trạng thái chuyển sang Đã xác nhận/Đang giao.",
       "",
       "Mình không xem được đơn riêng tư trong chat. Nếu bạn đang kẹt ở bước đặt hàng, thanh toán hay tra cứu đơn, nói rõ bước đó mình hướng dẫn tiếp.",
@@ -269,7 +356,7 @@ function fallbackStylistAnswer(message: string, products: StylistProduct[], orig
         "- Nếu vai rộng hoặc thích layer áo trong, giữ size gợi ý.",
         "- Nếu thích gọn người hơn, giảm 1 size.",
         "- Khi đặt hàng, bạn vẫn nên kiểm tra tồn kho size ở trang sản phẩm.",
-        hoodie ? `Gợi ý hoodie đang bán: ${hoodie.name} - ${formatCurrency(hoodie.price)} - ${productLink(hoodie, origin)}` : "",
+        hoodie ? `Gợi ý hoodie đang bán: ${hoodie.name} - ${formatCurrency(hoodie.price)}` : "",
       ]
         .filter(Boolean)
         .join("\n");
@@ -289,7 +376,7 @@ function fallbackStylistAnswer(message: string, products: StylistProduct[], orig
     lower.includes("đà lạt") ||
     lower.includes("lạnh") ||
     lower.includes("mưa") ||
-    lower.includes("tối");
+    lower.includes("se lạnh");
 
   const activeProducts = products
     .filter((product) => (product.stock ?? 0) > 0)
@@ -300,19 +387,7 @@ function fallbackStylistAnswer(message: string, products: StylistProduct[], orig
       return a.price - b.price;
     });
 
-  const picked: StylistProduct[] = [];
-  const pickedCategories = new Set<string>();
-  let total = 0;
-
-  for (const product of activeProducts) {
-    if (picked.length >= 4) break;
-    const categoryKey = product.category ?? product.line ?? product.name;
-    if (pickedCategories.has(categoryKey) && picked.length < 3) continue;
-    if (budget && total + product.price > budget && picked.length > 0) continue;
-    picked.push(product);
-    pickedCategories.add(categoryKey);
-    total += product.price;
-  }
+  const { picked, total, wantsSchool, wantsCafe } = chooseOutfitProducts(message, activeProducts, budget);
 
   if (!picked.length) {
     return "Mình chưa thấy sản phẩm còn hàng phù hợp trong catalog. Bạn thử tăng ngân sách hoặc quay lại sau khi shop nhập thêm hàng nhé.";
@@ -320,7 +395,7 @@ function fallbackStylistAnswer(message: string, products: StylistProduct[], orig
 
   const lines = picked.map(
     (product, index) =>
-      `${index + 1}. ${product.name} - ${formatCurrency(product.price)} - ${productLink(product, origin)}`,
+      `${index + 1}. ${product.name} - ${formatCurrency(product.price)}`,
   );
 
   return [
@@ -331,8 +406,12 @@ function fallbackStylistAnswer(message: string, products: StylistProduct[], orig
     "",
     `Tổng tạm tính: ${formatCurrency(total)}${budget ? ` / ngân sách khoảng ${formatCurrency(budget)}` : ""}.`,
     wantsColdWeather
-      ? "Lý do: ưu tiên item giữ ấm, màu dễ phối và hợp thời tiết se lạnh."
-      : "Lý do: set dễ mặc hằng ngày, có thể phối lại từng món với đồ sẵn có.",
+      ? "Lý do: ưu tiên item giữ ấm, dễ layer và vẫn gọn khi đi chơi cuối tuần."
+      : wantsSchool
+        ? "Lý do: set gọn, dễ vận động, đủ lịch sự để đi học và dùng lại hằng ngày."
+        : wantsCafe
+          ? "Lý do: set vừa chỉn chu vừa thoải mái, màu dễ phối cho buổi cafe hoặc đi chơi tối."
+          : "Lý do: set dễ mặc hằng ngày, có thể phối lại từng món với đồ sẵn có.",
     sizeSuggestion
       ? `Với ${sizeSuggestion.height}cm/${sizeSuggestion.weight}kg, hoodie/tee nên thử size ${sizeSuggestion.size} nếu muốn ${sizeSuggestion.wantsOversize ? "form rộng" : "vừa người"}.`
       : "Bạn cho mình thêm chiều cao/cân nặng, màu giày đang có và dịp mặc, mình sẽ tinh chỉnh set sát hơn.",
@@ -342,12 +421,14 @@ function fallbackStylistAnswer(message: string, products: StylistProduct[], orig
 function buildStylistPrompt({
   message,
   catalogContext,
+  outfitHint,
   storeKnowledge,
   historyContext,
   intent,
 }: {
   message: string;
   catalogContext: string;
+  outfitHint: string;
   storeKnowledge: string;
   historyContext: string;
   intent: string;
@@ -358,8 +439,13 @@ function buildStylistPrompt({
     "Phong cách: tiếng Việt có dấu, thân thiện, chắc ý, không dài dòng.",
     "Nguyên tắc bắt buộc:",
     "- Chỉ gợi ý sản phẩm có trong catalog/sản phẩm liên quan bên dưới. Không bịa tên, giá, tồn kho hoặc khuyến mãi.",
-    "- Khi gợi ý sản phẩm, ghi tên, giá, lý do chọn và link sản phẩm.",
-    "- Nếu hỏi outfit, ưu tiên set 2-4 món, tổng tiền tạm tính và lý do phối.",
+    "- Tuyệt đối không ghi URL, link, slug, mã id sản phẩm hoặc markdown link trong câu trả lời.",
+    "- Khi gợi ý sản phẩm, mỗi dòng chỉ ghi: Tên sản phẩm - Giá. Không thêm link sau giá.",
+    "- Nếu hỏi outfit, ưu tiên set 2-4 món, tổng tiền tạm tính, lý do phối ngắn gọn và có cân đối ngân sách.",
+    "- Không bắt đầu set bằng phụ kiện như mũ/túi nếu vẫn có áo hoặc hoodie phù hợp. Phụ kiện chỉ là món bổ sung sau áo/quần/giày.",
+    "- Nếu ngân sách thấp, chọn ít món quan trọng trước; nếu vượt ngân sách, nói rõ vượt bao nhiêu và đề xuất giảm món nào.",
+    "- Suy luận theo dịp mặc: đi học cần gọn, thoải mái; đi Đà Lạt cần giữ ấm/layer; đi cafe tối cần chỉn chu; đi chơi cần dễ vận động.",
+    "- Phối màu có chủ ý: ưu tiên 2-3 màu chính, tránh set quá rối. Nói ngắn vì sao các món hợp nhau.",
     "- Nếu hỏi size, hỏi thêm chiều cao/cân nặng khi thiếu dữ liệu, nhưng vẫn đưa hướng dẫn tạm thời.",
     "- Nếu hỏi đơn hàng riêng tư, hướng dẫn khách đăng nhập vào trang tài khoản/tra cứu đơn; không đoán trạng thái đơn.",
     "- Không yêu cầu mật khẩu, OTP, thông tin thẻ ngân hàng.",
@@ -369,6 +455,9 @@ function buildStylistPrompt({
     `Ý định dự đoán: ${intent}`,
     "",
     storeKnowledge,
+    "",
+    "Set đề xuất từ hệ thống nếu phù hợp với câu hỏi:",
+    outfitHint,
     "",
     "Catalog/sản phẩm liên quan đang bán:",
     catalogContext,
@@ -397,7 +486,7 @@ function isCompleteAnswer(answer: string, intent: string) {
     return false;
   }
 
-  if (intent === "styling" && !trimmed.includes("/product/")) {
+  if (intent === "styling" && !/\d[\d.,]*\s*₫|VND/i.test(trimmed)) {
     return false;
   }
 
@@ -453,6 +542,7 @@ export async function POST(request: Request) {
   let products: StylistProduct[] = [];
   let catalogContext =
     "Không đọc được catalog lúc này. Hãy trả lời như stylist và nói rõ đây là gợi ý tham khảo.";
+  let outfitHint = "Chưa đủ dữ liệu để đề xuất set cố định. Hãy tự chọn từ catalog theo nguyên tắc phối đồ.";
 
   try {
     const supabase = createClient();
@@ -469,19 +559,34 @@ export async function POST(request: Request) {
       .slice(0, 30);
 
     const relevantProducts = pickRelevantProducts(message, products);
-    catalogContext = toCatalogContext(
-      relevantProducts.length ? relevantProducts : products.slice(0, 16),
-      origin,
-    );
+    catalogContext = toCatalogContext(relevantProducts.length ? relevantProducts : products.slice(0, 16));
+    if (intent === "styling" || intent === "general") {
+      const { picked, total } = chooseOutfitProducts(message, products, parseBudget(message));
+      if (picked.length) {
+        outfitHint = [
+          ...picked.map((product, index) => `${index + 1}. ${product.name} - ${formatCurrency(product.price)}`),
+          `Tổng tạm tính: ${formatCurrency(total)}`,
+        ].join("\n");
+      }
+    }
   } catch {
     // Keep the chatbot available even if Supabase is temporarily unavailable.
+  }
+
+  if (intent === "styling" && products.length) {
+    return new Response(encoder.encode(sanitizeAssistantAnswer(fallbackStylistAnswer(message, products, origin))), {
+      headers: {
+        "Content-Type": "text/plain; charset=utf-8",
+        "Cache-Control": "no-cache",
+      },
+    });
   }
 
   const apiKey = process.env.GEMINI_API_KEY;
   const provider = process.env.AI_PROVIDER ?? "gemini";
 
   if (provider !== "gemini" || !apiKey) {
-    return new Response(encoder.encode(fallbackStylistAnswer(message, products, origin)), {
+    return new Response(encoder.encode(sanitizeAssistantAnswer(fallbackStylistAnswer(message, products, origin))), {
       headers: {
         "Content-Type": "text/plain; charset=utf-8",
       },
@@ -491,7 +596,8 @@ export async function POST(request: Request) {
   const prompt = buildStylistPrompt({
     message,
     catalogContext,
-    storeKnowledge: toStoreKnowledge(origin),
+    outfitHint,
+    storeKnowledge: toStoreKnowledge(),
     historyContext: toHistoryContext(history),
     intent,
   });
@@ -509,11 +615,13 @@ export async function POST(request: Request) {
     }
   }
 
+  answer = sanitizeAssistantAnswer(answer);
+
   if (!isCompleteAnswer(answer, intent)) {
     answer = fallbackStylistAnswer(message, products, origin);
   }
 
-  return new Response(encoder.encode(answer), {
+  return new Response(encoder.encode(sanitizeAssistantAnswer(answer)), {
     headers: {
       "Content-Type": "text/plain; charset=utf-8",
       "Cache-Control": "no-cache",
