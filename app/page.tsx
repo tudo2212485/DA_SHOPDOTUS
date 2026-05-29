@@ -6,6 +6,8 @@ import { ProductCard } from "@/components/product/product-card";
 import { getProducts } from "@/lib/data/products";
 import { getProductBadge } from "@/lib/storefront";
 
+export const dynamic = "force-dynamic";
+
 export default async function HomePage() {
   const products = (await getProducts()).filter(
     (product) => (product.gender ?? "nam") === "nam",
