@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { normalizeCategory } from "@/lib/catalog";
+import { isAdminUser } from "@/lib/admin";
 import type { ProductLine } from "@/lib/product-taxonomy";
 import { createClient } from "@/lib/supabase/server";
 
@@ -31,7 +32,9 @@ async function requireUser() {
     redirect("/auth/login");
   }
 
-  return { supabase, user };
+  const isAdmin = await isAdminUser(supabase, user);
+
+  return { supabase, user, isAdmin };
 }
 
 function readGender(value: FormDataEntryValue | null): "nam" | "nu" | "unisex" {
@@ -135,7 +138,7 @@ export async function createProduct(formData: FormData): Promise<ProductActionRe
 }
 
 export async function updateProduct(formData: FormData): Promise<ProductActionResult> {
-  const { supabase, user } = await requireUser();
+  const { supabase, user, isAdmin } = await requireUser();
 
   const id = String(formData.get("id") ?? "");
   const name = String(formData.get("name") ?? "");
@@ -177,7 +180,7 @@ export async function updateProduct(formData: FormData): Promise<ProductActionRe
     return { ok: false, message: "Vui lòng nhập tồn kho từ 0 trở lên." };
   }
 
-  const { error } = await supabase
+  let query = supabase
     .from("products")
     .update({
       name,
@@ -193,8 +196,13 @@ export async function updateProduct(formData: FormData): Promise<ProductActionRe
       is_active: isActive,
       updated_at: new Date().toISOString(),
     })
-    .eq("id", id)
-    .eq("owner_id", user.id);
+    .eq("id", id);
+
+  if (!isAdmin) {
+    query = query.eq("owner_id", user.id);
+  }
+
+  const { error } = await query.select("id").single();
 
   if (error) {
     return { ok: false, message: toProductErrorMessage(error.message) };
@@ -208,23 +216,31 @@ export async function updateProduct(formData: FormData): Promise<ProductActionRe
 }
 
 export async function deleteProduct(formData: FormData): Promise<ProductActionResult> {
-  const { supabase, user } = await requireUser();
+  const { supabase, user, isAdmin } = await requireUser();
   const id = String(formData.get("id") ?? "");
 
   if (!id) {
     return { ok: false, message: "Không tìm thấy sản phẩm cần xóa." };
   }
 
-  const { error } = await supabase
+  let query = supabase
     .from("products")
     .delete()
-    .eq("id", id)
-    .eq("owner_id", user.id);
+    .eq("id", id);
+
+  if (!isAdmin) {
+    query = query.eq("owner_id", user.id);
+  }
+
+  const { error } = await query.select("id").single();
 
   if (error) {
     return {
       ok: false,
-      message: "Không thể xóa sản phẩm này. Nếu sản phẩm đã có đơn hàng, hãy chuyển trạng thái sang Ẩn.",
+      message:
+        error.code === "23503"
+          ? "Sản phẩm đã nằm trong đơn hàng nên không thể xóa vĩnh viễn. Hãy bấm Ẩn để không hiển thị ở trang khách hàng."
+          : "Không thể xóa sản phẩm này. Vui lòng kiểm tra quyền quản trị hoặc thử chuyển trạng thái sang Ẩn.",
     };
   }
 

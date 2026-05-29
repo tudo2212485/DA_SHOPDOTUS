@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 
 import { SetupRequired } from "@/components/layout/setup-required";
 import { ProductAdminForm } from "@/components/product/product-admin-form";
+import { isAdminUser } from "@/lib/admin";
 import { createClient } from "@/lib/supabase/server";
 
 export default async function AdminProductsPage() {
@@ -26,11 +27,17 @@ export default async function AdminProductsPage() {
     redirect("/auth/login");
   }
 
-  const { data: products, error } = await supabase
+  const isAdmin = await isAdminUser(supabase, user);
+  let productQuery = supabase
     .from("products")
     .select("id,name,slug,description,price,image_url,image_hover_url,category,line,gender,stock,owner_id,is_active,created_at")
-    .eq("owner_id", user.id)
     .order("created_at", { ascending: false });
+
+  if (!isAdmin) {
+    productQuery = productQuery.eq("owner_id", user.id);
+  }
+
+  const { data: products, error } = await productQuery;
 
   if (error) {
     throw new Error(error.message);

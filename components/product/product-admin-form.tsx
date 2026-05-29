@@ -117,6 +117,18 @@ export function ProductAdminForm({ products }: AdminFormProps) {
     runProductAction(updateProduct, formData);
   }
 
+  function requestDelete(product: Product) {
+    const confirmed = window.confirm(
+      `Bạn chắc chắn muốn xóa "${product.name}"? Nếu sản phẩm đã có trong đơn hàng, hệ thống sẽ không cho xóa để giữ lịch sử hóa đơn.`,
+    );
+
+    if (!confirmed) return;
+
+    const formData = new FormData();
+    formData.set("id", product.id);
+    runProductAction(deleteProduct, formData);
+  }
+
   return (
     <div className="space-y-6">
       <div className="grid gap-4 md:grid-cols-3">
@@ -214,7 +226,7 @@ export function ProductAdminForm({ products }: AdminFormProps) {
             {filteredProducts.map((product) => (
               <div
                 key={product.id}
-                className="grid gap-4 p-4 transition hover:bg-orange-50/40 lg:grid-cols-[72px_minmax(0,1fr)_140px_160px_220px] lg:items-center"
+                className="grid gap-4 p-4 transition hover:bg-orange-50/40 lg:grid-cols-[72px_minmax(0,1fr)_140px_160px_320px] lg:items-center"
               >
                 <div className="relative h-20 w-20 overflow-hidden rounded-lg border border-neutral-200 bg-neutral-100">
                   <Image
@@ -281,6 +293,16 @@ export function ProductAdminForm({ products }: AdminFormProps) {
                   <Button type="button" onClick={() => setEditingProduct(product)} disabled={isPending}>
                     <Pencil className="mr-2 h-4 w-4" />
                     Chỉnh sửa
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700"
+                    onClick={() => requestDelete(product)}
+                    disabled={isPending}
+                  >
+                    <Trash2 className="mr-2 h-4 w-4" />
+                    Xóa
                   </Button>
                 </div>
               </div>
@@ -585,6 +607,12 @@ function ProductEditorDialog({
                   className="border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700"
                   disabled={pending}
                   onClick={() => {
+                    const confirmed = window.confirm(
+                      `Bạn chắc chắn muốn xóa "${product.name}"? Nếu sản phẩm đã có trong đơn hàng, hệ thống sẽ không cho xóa để giữ lịch sử hóa đơn.`,
+                    );
+
+                    if (!confirmed) return;
+
                     const formData = new FormData();
                     formData.set("id", product.id);
                     onDelete(formData);
