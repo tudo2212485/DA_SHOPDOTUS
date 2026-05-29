@@ -26,6 +26,12 @@ dev-err.log
 # generated QA artifacts
 public/qa-report.html
 public/qa-report.json
+docs/test-evidence/
+submission/
+
+# Office temporary files
+~$*
+*.tmp
 
 # Supabase CLI local cache
 supabase/.temp/

@@ -232,7 +232,7 @@ async function main() {
       throw new Error("Khong thay nut checkout");
     }
     await checkout.click();
-    await customerPage.waitForLoadState("networkidle").catch(() => {});
+    await assertVisible(customerPage, "Đặt hàng thành công", 12000);
     await customerPage.goto(`${baseUrl}/dashboard`, { waitUntil: "networkidle" });
     if (!(await isVisible(customerPage, productName, 8000))) {
       throw new Error(
@@ -259,7 +259,7 @@ async function main() {
   if (checkoutPassed) {
     await step("Admin sees order", async () => {
     await adminPage.goto(`${baseUrl}/admin/orders`, { waitUntil: "networkidle" });
-      await assertVisible(adminPage, "Quản lý đơn hàng");
+      await assertVisible(adminPage, "Trung tâm xử lý đơn hàng");
       await assertVisible(adminPage, productName);
       return "Order visible in admin";
     });
