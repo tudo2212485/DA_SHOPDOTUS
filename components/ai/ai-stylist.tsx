@@ -15,6 +15,8 @@ type ChatMessage = {
 const starterPrompts = [
   "Phối set đi Đà Lạt cuối tuần",
   "Set đi học dưới 900 nghìn",
+  "Nam 1m70 62kg mặc hoodie size gì?",
+  "Tra cứu đơn hàng ở đâu?",
   "Đi cafe tối nên mặc gì?",
 ];
 
@@ -48,12 +50,13 @@ export function AIStylist() {
     ]);
 
     try {
+      const history = messages.slice(-8);
       const response = await fetch("/api/ai-stylist", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ message }),
+        body: JSON.stringify({ message, history }),
       });
 
       if (!response.body) {
