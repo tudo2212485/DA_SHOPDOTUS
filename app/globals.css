@@ -86,3 +86,45 @@
     animation: fade-up 420ms ease-out both;
   }
 }
+
+@keyframes cart-toast {
+  0% {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.98);
+  }
+  14% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  86% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.98);
+  }
+}
+
+@keyframes cart-fly {
+  0% {
+    opacity: 0.95;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  55% {
+    opacity: 0.95;
+    transform: translate3d(calc(var(--cart-fly-x) * 0.62), calc(var(--cart-fly-y) * 0.32 - 90px), 0) scale(0.72) rotate(4deg);
+  }
+  100% {
+    opacity: 0;
+    transform: translate3d(var(--cart-fly-x), var(--cart-fly-y), 0) scale(0.24) rotate(10deg);
+  }
+}
+
+.animate-cart-toast {
+  animation: cart-toast 2.8s ease both;
+}
+
+.animate-cart-fly {
+  animation: cart-fly 0.82s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}

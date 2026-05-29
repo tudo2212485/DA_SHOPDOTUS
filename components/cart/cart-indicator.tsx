@@ -12,6 +12,7 @@ export function CartIndicator() {
   return (
     <Link
       href="/cart"
+      data-cart-target
       aria-label={`Mở giỏ hàng, hiện có ${totalQuantity} sản phẩm`}
       className="flex h-10 items-center gap-2 rounded-md border border-neutral-800 px-3 text-sm text-neutral-700 transition hover:border-orange-500 hover:bg-orange-50 hover:text-orange-600 dark:text-neutral-300 dark:hover:bg-orange-500/10 dark:hover:text-orange-300"
     >

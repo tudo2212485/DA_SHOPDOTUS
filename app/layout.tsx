@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 
 import { AIStylist } from "@/components/ai/ai-stylist";
+import { CartFeedback } from "@/components/cart/cart-feedback";
 import { SiteFooter } from "@/components/layout/site-footer";
 import { SiteHeader } from "@/components/layout/site-header";
 import { ThemeProvider } from "@/components/theme/theme-provider";
@@ -26,6 +27,7 @@ export default function RootLayout({
             <SiteHeader />
             {children}
             <SiteFooter />
+            <CartFeedback />
             <AIStylist />
           </CartProvider>
         </ThemeProvider>

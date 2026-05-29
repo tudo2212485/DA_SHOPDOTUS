@@ -3,8 +3,8 @@
 import { useMemo, useState } from "react";
 import { ShoppingBag } from "lucide-react";
 
+import { useAddToCartFeedback } from "@/components/cart/cart-feedback";
 import { Button } from "@/components/ui/button";
-import { useCart } from "@/contexts/cart-context";
 import { getSizeOptions } from "@/lib/product-options";
 import type { Product } from "@/types/product";
 
@@ -15,7 +15,7 @@ export function AddToCartButton({
   product: Product;
   showSizeSelector?: boolean;
 }) {
-  const { addItem } = useCart();
+  const addToCart = useAddToCartFeedback();
   const sizeOptions = useMemo(() => getSizeOptions(product), [product]);
   const [selectedSize, setSelectedSize] = useState(sizeOptions[0]?.value ?? "M");
 
@@ -54,7 +54,7 @@ export function AddToCartButton({
       <Button
         type="button"
         className="gap-2"
-        onClick={() => addItem(product, selectedSize)}
+        onClick={(event) => addToCart(product, selectedSize, event.currentTarget)}
         aria-label={`Thêm ${product.name} size ${selectedSize} vào giỏ hàng`}
       >
         <ShoppingBag className="h-4 w-4" aria-hidden="true" />

@@ -4,8 +4,8 @@ import { useMemo, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 
+import { useAddToCartFeedback } from "@/components/cart/cart-feedback";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { useCart } from "@/contexts/cart-context";
 import { getGalleryImages, getSizeOptions } from "@/lib/product-options";
 import { inferLine } from "@/lib/product-taxonomy";
 import type { ProductBadge } from "@/lib/storefront";
@@ -25,7 +25,7 @@ export function ProductCard({
   priority?: boolean;
   badge?: ProductBadge | null;
 }) {
-  const { addItem } = useCart();
+  const addToCart = useAddToCartFeedback();
   const [openQuickView, setOpenQuickView] = useState(false);
   const [activeImage, setActiveImage] = useState(0);
   const lineLabel = product.line ?? inferLine(product);
@@ -37,7 +37,7 @@ export function ProductCard({
     sizeOptions.find((option) => option.value === selectedSize)?.stock ?? product.stock ?? 0;
   return (
     <>
-      <Card className="group animate-fade-up overflow-hidden border-neutral-200 bg-white text-neutral-900 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-50">
+      <Card data-cart-fly-source className="group animate-fade-up overflow-hidden border-neutral-200 bg-white text-neutral-900 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-50">
         <CardHeader className="p-0">
           <div className="relative aspect-[4/5] bg-neutral-100 dark:bg-neutral-800">
             {badge ? (
@@ -90,7 +90,7 @@ export function ProductCard({
           </p>
           <button
             type="button"
-            onClick={() => addItem(product, selectedSize)}
+            onClick={(event) => addToCart(product, selectedSize, event.currentTarget)}
             className="rounded-md border border-neutral-300 px-3 py-1 text-sm font-medium text-neutral-800 transition hover:border-neutral-500 dark:border-neutral-700 dark:text-neutral-100"
           >
             Thêm vào giỏ
@@ -180,8 +180,9 @@ export function ProductCard({
                 <div className="grid grid-cols-2 gap-2">
                   <button
                     type="button"
-                    onClick={() => {
-                      addItem(product, selectedSize);
+                    data-cart-fly-source
+                    onClick={(event) => {
+                      addToCart(product, selectedSize, event.currentTarget);
                       setOpenQuickView(false);
                     }}
                     className="rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white dark:bg-white dark:text-neutral-900"
