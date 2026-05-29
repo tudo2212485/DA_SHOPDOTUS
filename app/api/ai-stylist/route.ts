@@ -19,6 +19,8 @@ type ChatHistoryMessage = {
   content?: string;
 };
 
+type StylistIntent = "greeting" | "styling" | "purchase" | "order" | "size" | "payment" | "general";
+
 type GeminiGenerateContentResponse = {
   candidates?: Array<{
     content?: {
@@ -37,11 +39,15 @@ function formatCurrency(value: number) {
   }).format(value);
 }
 
-function detectIntent(message: string) {
+function detectIntent(message: string): StylistIntent {
   const lower = message.toLowerCase();
 
   if (/^(hi|hello|hey|chào|chao|xin chào|alo|ê|e|bạn ơi|ban oi)[\s!.?]*$/i.test(lower.trim())) {
     return "greeting";
+  }
+
+  if (/(mua|đặt mua|dat mua|lấy|lay|chốt|chot|thêm vào giỏ|them vao gio|add to cart|checkout)/i.test(lower)) {
+    return "purchase";
   }
 
   if (/(phối|set|outfit|mặc gì|đi học|đi chơi|đà lạt|cafe|hẹn hò|du lịch)/i.test(lower)) {
@@ -125,6 +131,108 @@ function suggestTopSize(message: string) {
   else size = wantsOversize ? "XXL" : "XL";
 
   return { size, height, weight, wantsOversize };
+}
+
+function tokenize(value: string) {
+  return toPlainSearchText(value)
+    .split(/[^a-z0-9]+/)
+    .filter((word) => word.length >= 3);
+}
+
+function findProductByMention(message: string, products: StylistProduct[]) {
+  const normalizedMessage = toPlainSearchText(message);
+  const numberMatch = normalizedMessage.match(/\b(?:so|mau|mon|cai)\s*(\d{1,2})\b|\b(\d{1,2})\b/);
+  const mentionedNumber = numberMatch ? Number(numberMatch[1] ?? numberMatch[2]) : null;
+
+  if (mentionedNumber && products[mentionedNumber - 1]) {
+    return products[mentionedNumber - 1];
+  }
+
+  const scored = products
+    .map((product) => {
+      const productName = toPlainSearchText(product.name);
+      const productWords = tokenize(product.name);
+      const matchedWords = productWords.filter((word) => normalizedMessage.includes(word));
+      const exactScore = normalizedMessage.includes(productName) ? 100 : 0;
+      return {
+        product,
+        score: exactScore + matchedWords.length * 12 + matchedWords.join("").length,
+      };
+    })
+    .filter((item) => item.score >= 24)
+    .sort((a, b) => b.score - a.score);
+
+  return scored[0]?.product ?? null;
+}
+
+function findProductByHistoryNumber(message: string, products: StylistProduct[], history?: ChatHistoryMessage[]) {
+  const normalizedMessage = toPlainSearchText(message);
+  const numberMatch = normalizedMessage.match(/\b(?:so|mau|mon|cai)\s*(\d{1,2})\b|\b(\d{1,2})\b/);
+  const mentionedNumber = numberMatch ? Number(numberMatch[1] ?? numberMatch[2]) : null;
+
+  if (!mentionedNumber) return null;
+
+  const lastAssistant = [...(history ?? [])]
+    .reverse()
+    .find((item) => item.role === "assistant" && item.content?.trim());
+
+  if (!lastAssistant?.content) return null;
+
+  const orderedProducts = lastAssistant.content
+    .split(/\r?\n/)
+    .map((line) => {
+      const lineNumber = line.match(/^\s*(\d{1,2})\.\s*(.+?)(?:\s+-\s+|$)/);
+      if (!lineNumber) return null;
+      const productName = toPlainSearchText(lineNumber[2]);
+      const product = products.find((item) => productName.includes(toPlainSearchText(item.name)));
+      return product ? { order: Number(lineNumber[1]), product } : null;
+    })
+    .filter(Boolean) as Array<{ order: number; product: StylistProduct }>;
+
+  return orderedProducts.find((item) => item.order === mentionedNumber)?.product ?? null;
+}
+
+function purchaseAnswer(message: string, products: StylistProduct[], history?: ChatHistoryMessage[]) {
+  const historyProducts = products.filter((product) => {
+    const productName = toPlainSearchText(product.name);
+    return (history ?? []).some((item) =>
+      item.role === "assistant" && toPlainSearchText(item.content ?? "").includes(productName),
+    );
+  });
+  const product =
+    findProductByHistoryNumber(message, products, history) ??
+    findProductByMention(message, products) ??
+    findProductByMention(message, historyProducts) ??
+    historyProducts[0] ??
+    null;
+
+  if (!product) {
+    return [
+      "Được, bạn muốn mua mẫu nào trong set?",
+      "Bạn gõ đúng tên sản phẩm, ví dụ: “mình muốn mua Boxy Tee Core White”, mình sẽ hướng dẫn nhanh bước đặt hàng.",
+    ].join("\n");
+  }
+
+  const stock = product.stock ?? 0;
+  const sizeSuggestion = suggestTopSize(message);
+
+  return [
+    `Mẫu bạn chọn: ${product.name}`,
+    `Giá: ${formatCurrency(product.price)}`,
+    `Tình trạng: ${stock > 0 ? `còn ${stock} sản phẩm` : "đang hết hàng"}.`,
+    "",
+    stock > 0
+      ? [
+          "Cách mua nhanh:",
+          "1. Tìm sản phẩm theo đúng tên trên trang sản phẩm.",
+          "2. Chọn size phù hợp rồi bấm Thêm vào giỏ.",
+          "3. Vào giỏ hàng, nhập thông tin nhận hàng và xác nhận đặt hàng.",
+        ].join("\n")
+      : "Mẫu này đang hết hàng, bạn nên chọn mẫu khác còn tồn trong shop.",
+    sizeSuggestion
+      ? `Với số đo bạn đưa, mình nghiêng về size ${sizeSuggestion.size}.`
+      : "Nếu bạn gửi chiều cao/cân nặng, mình tư vấn size sát hơn trước khi bạn đặt.",
+  ].join("\n");
 }
 
 function productMatches(product: StylistProduct, patterns: RegExp[]) {
@@ -306,7 +414,7 @@ function getRequestOrigin(request: Request) {
   return process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
 }
 
-function fallbackStylistAnswer(message: string, products: StylistProduct[], origin: string) {
+function fallbackStylistAnswer(message: string, products: StylistProduct[], origin: string, history?: ChatHistoryMessage[]) {
   const lower = message.toLowerCase();
   const intent = detectIntent(message);
 
@@ -338,6 +446,10 @@ function fallbackStylistAnswer(message: string, products: StylistProduct[], orig
       "",
       "Bạn không nên gửi mật khẩu, OTP hoặc thông tin thẻ ngân hàng trong chat.",
     ].join("\n");
+  }
+
+  if (intent === "purchase") {
+    return purchaseAnswer(message, products, history);
   }
 
   if (intent === "size") {
@@ -573,8 +685,8 @@ export async function POST(request: Request) {
     // Keep the chatbot available even if Supabase is temporarily unavailable.
   }
 
-  if (intent === "styling" && products.length) {
-    return new Response(encoder.encode(sanitizeAssistantAnswer(fallbackStylistAnswer(message, products, origin))), {
+  if ((intent === "styling" || intent === "purchase") && products.length) {
+    return new Response(encoder.encode(sanitizeAssistantAnswer(fallbackStylistAnswer(message, products, origin, history))), {
       headers: {
         "Content-Type": "text/plain; charset=utf-8",
         "Cache-Control": "no-cache",
@@ -586,7 +698,7 @@ export async function POST(request: Request) {
   const provider = process.env.AI_PROVIDER ?? "gemini";
 
   if (provider !== "gemini" || !apiKey) {
-    return new Response(encoder.encode(sanitizeAssistantAnswer(fallbackStylistAnswer(message, products, origin))), {
+    return new Response(encoder.encode(sanitizeAssistantAnswer(fallbackStylistAnswer(message, products, origin, history))), {
       headers: {
         "Content-Type": "text/plain; charset=utf-8",
       },
@@ -618,7 +730,7 @@ export async function POST(request: Request) {
   answer = sanitizeAssistantAnswer(answer);
 
   if (!isCompleteAnswer(answer, intent)) {
-    answer = fallbackStylistAnswer(message, products, origin);
+    answer = fallbackStylistAnswer(message, products, origin, history);
   }
 
   return new Response(encoder.encode(sanitizeAssistantAnswer(answer)), {
