@@ -24,7 +24,6 @@ export default async function ProductDetailPage({
   }
 
   const currentLine = product.line ?? inferLine(product);
-  const useInternalImage = product.image_url.startsWith("/api/catalog-image/");
   const related = products
     .filter((item) => item.id !== product.id)
     .filter((item) => (item.line ?? inferLine(item)) === currentLine)
@@ -41,7 +40,6 @@ export default async function ProductDetailPage({
             sizes="(min-width: 1024px) 60vw, 100vw"
             className="object-cover"
             priority
-            unoptimized={useInternalImage}
           />
         </div>
 

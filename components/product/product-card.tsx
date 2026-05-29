@@ -35,11 +35,6 @@ export function ProductCard({
 
   const selectedStock =
     sizeOptions.find((option) => option.value === selectedSize)?.stock ?? product.stock ?? 0;
-  const useInternalImage = product.image_url.startsWith("/api/catalog-image/");
-  const useInternalHoverImage = Boolean(
-    product.image_hover_url?.startsWith("/api/catalog-image/"),
-  );
-
   return (
     <>
       <Card className="group animate-fade-up overflow-hidden border-neutral-200 bg-white text-neutral-900 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-50">
@@ -61,7 +56,6 @@ export function ProductCard({
                   : "group-hover:scale-105"
               }`}
               priority={priority}
-              unoptimized={useInternalImage}
             />
             {product.image_hover_url ? (
               <Image
@@ -70,7 +64,6 @@ export function ProductCard({
                 fill
                 sizes="(min-width: 1024px) 25vw, (min-width: 640px) 50vw, 100vw"
                 className="object-cover opacity-0 transition duration-500 group-hover:opacity-100"
-                unoptimized={useInternalHoverImage}
               />
             ) : null}
 
