@@ -3,7 +3,7 @@ import { ArrowDownWideNarrow, ArrowUpNarrowWide, Sparkles, SlidersHorizontal } f
 
 import { ProductCard } from "@/components/product/product-card";
 import { getProducts } from "@/lib/data/products";
-import { PRODUCT_LINES, inferLine } from "@/lib/product-taxonomy";
+import { inferLine } from "@/lib/product-taxonomy";
 import { getProductBadge } from "@/lib/storefront";
 
 type ProductsPageProps = {
@@ -18,6 +18,8 @@ type ProductsPageProps = {
     stock?: string;
   };
 };
+
+export const dynamic = "force-dynamic";
 
 function withParams(
   current: ProductsPageProps["searchParams"],
@@ -48,23 +50,19 @@ const currencyFormatter = new Intl.NumberFormat("vi-VN", {
 const SECTION_PRESETS = {
   ao: {
     label: "Áo",
-    lines: ["Graphic Tee", "Prime Jersey", "Urbas Inspired"],
     categories: ["T-shirt Boxy", "Hoodie Oversize", "Shirt"],
   },
   quan: {
     label: "Quần",
-    lines: ["Cargo Utility"],
     categories: ["Pants", "Shorts"],
   },
   giay: {
     label: "Giày",
-    lines: ["Basas Inspired", "Vintas Inspired", "Urbas Inspired", "Pattas Inspired"],
-    categories: ["Sneaker Low-top", "Sneaker High-top", "Slip-on"],
+    categories: ["Sneaker Low-top"],
   },
   "phu-kien": {
     label: "Phụ kiện",
-    lines: ["Daily Accessories"],
-    categories: ["Cap", "Bag", "Socks", "Tote Bag"],
+    categories: ["Cap", "Bag"],
   },
 } as const;
 
@@ -75,36 +73,42 @@ function isSectionKey(value: string): value is SectionKey {
 }
 
 export default async function ProductsPage({ searchParams }: ProductsPageProps) {
-  const products = (await getProducts()).filter(
-    (product) => (product.gender ?? "nam") === "nam",
-  );
+  const products = await getProducts();
 
   const sectionRaw = searchParams?.section ?? "";
   const selectedSection: SectionKey | null = isSectionKey(sectionRaw)
     ? sectionRaw
     : null;
   const keyword = (searchParams?.q ?? "").trim().toLowerCase();
-  const selectedLine = searchParams?.line ?? "";
+  let selectedLine = searchParams?.line ?? "";
   const selectedSort = searchParams?.sort ?? "newest";
   const selectedCategory = searchParams?.category ?? "";
   const minPrice = Number(searchParams?.min ?? "0");
   const maxPrice = Number(searchParams?.max ?? "0");
   const inStockOnly = searchParams?.stock === "1";
 
-  const allowedLines: Set<string> | null = selectedSection
-    ? new Set<string>(SECTION_PRESETS[selectedSection].lines)
+  const allowedCategories: Set<string> | null = selectedSection
+    ? new Set<string>(SECTION_PRESETS[selectedSection].categories)
     : null;
-  const presetCategories = selectedSection
-    ? SECTION_PRESETS[selectedSection].categories
-    : [];
-  const categories = selectedSection
-    ? [...presetCategories]
-    : Array.from(new Set(products.map((p) => p.category ?? "Streetwear"))).sort();
 
-  let filtered = products.filter((product) => {
+  const scopedProducts = products.filter((product) => {
+    const category = product.category ?? "Streetwear";
+    return !allowedCategories || allowedCategories.has(category);
+  });
+
+  const categories = selectedSection
+    ? Array.from(new Set(scopedProducts.map((p) => p.category ?? "Streetwear"))).sort()
+    : Array.from(new Set(products.map((p) => p.category ?? "Streetwear"))).sort();
+  const lineOptions = Array.from(
+    new Set(scopedProducts.map((product) => product.line ?? inferLine(product))),
+  ).sort((a, b) => a.localeCompare(b, "vi"));
+  if (selectedLine && !lineOptions.includes(selectedLine)) {
+    selectedLine = "";
+  }
+
+  let filtered = scopedProducts.filter((product) => {
     const line = product.line ?? inferLine(product);
     const category = product.category ?? "Streetwear";
-    if (allowedLines && !allowedLines.has(line)) return false;
     if (selectedLine && line !== selectedLine) return false;
     if (selectedCategory && category !== selectedCategory) return false;
     if (minPrice > 0 && product.price < minPrice) return false;
@@ -148,10 +152,7 @@ export default async function ProductsPage({ searchParams }: ProductsPageProps) 
               >
                 Tất cả
               </Link>
-              {(selectedSection
-                ? SECTION_PRESETS[selectedSection].lines
-                : PRODUCT_LINES
-              ).map((line) => (
+              {lineOptions.map((line) => (
                 <Link
                   key={line}
                   href={withParams(searchParams, { line })}
