@@ -7,7 +7,9 @@ export function SetupRequired({ title, description }: { title: string; descripti
         <pre className="mt-4 overflow-x-auto rounded-md border border-neutral-200 bg-neutral-100 p-4 text-xs text-neutral-700 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-300">
 {`NEXT_PUBLIC_SUPABASE_URL=...
 NEXT_PUBLIC_SUPABASE_ANON_KEY=...
-OPENAI_API_KEY=...`}
+GEMINI_API_KEY=...
+GEMINI_MODEL=gemini-2.0-flash
+AI_PROVIDER=gemini`}
         </pre>
       </section>
     </main>
