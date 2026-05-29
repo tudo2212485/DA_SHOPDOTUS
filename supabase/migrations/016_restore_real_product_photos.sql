@@ -29,8 +29,8 @@ with curated(slug, name, description, category, line, gender, image_url, image_h
     'Hoodie Oversize',
     'Urbas Inspired',
     'nam',
-    'https://images.unsplash.com/photo-1615397349754-cfa2066a298e?auto=format&fit=crop&w=900&h=1200&q=80',
-    'https://images.unsplash.com/photo-1615397349754-cfa2066a298e?auto=format&fit=crop&w=1200&h=1200&q=80'
+    'https://thfvnext.bing.com/th/id/OIP.fnuOysX5uLCegJatxPjXsAHaJQ?cb=thfvnextfalcon&w=900&h=1125&rs=1&pid=ImgDetMain&o=7&rm=3',
+    'https://thfvnext.bing.com/th/id/OIP.fnuOysX5uLCegJatxPjXsAHaJQ?cb=thfvnextfalcon&w=900&h=1125&rs=1&pid=ImgDetMain&o=7&rm=3'
   ),
   (
     'hoodie-tudo',
