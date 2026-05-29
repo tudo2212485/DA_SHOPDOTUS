@@ -31,7 +31,8 @@ function toOrderActionMessage(message: string) {
 
 export async function updateOrderStatus(formData: FormData) {
   const orderId = String(formData.get("order_id") ?? "");
-  const status = String(formData.get("status") ?? "") as OrderStatus;
+  const statusValues = formData.getAll("status");
+  const status = String(statusValues.at(-1) ?? "") as OrderStatus;
 
   if (!orderId || !ORDER_STATUSES.includes(status)) {
     redirectWithOrderMessage("error", "Trạng thái đơn hàng không hợp lệ.");
