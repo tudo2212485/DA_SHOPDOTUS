@@ -72,7 +72,17 @@ Quy che yeu cau co minh chung su dung AI tool, toi thieu tren 5 prompts. Khi nop
 
 **Ket qua:** Ap migration 008-011, xac nhan schema va RPC dung tren Supabase.
 
-## Prompt 8 - Dong goi Docker
+## Prompt 8 - Tich hop Gemini API cho chatbot
+
+**Muc dich:** Tao chatbot AI Stylist co the goi y set do dua tren san pham that trong Supabase.
+
+**Prompt da dung:**
+
+> Chuyen chatbot AI Stylist tu OpenAI sang Gemini API, doc catalog san pham active con hang tu Supabase va fallback neu Gemini bi qua tai.
+
+**Ket qua:** Chatbot dung `GEMINI_API_KEY`, goi Gemini API tren server, khong lo key ra frontend, va van co cau tra loi fallback theo catalog khi API loi.
+
+## Prompt 9 - Dong goi Docker
 
 **Muc dich:** Dat tieu chi Dockerfile + Docker Compose.
 

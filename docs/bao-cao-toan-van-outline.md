@@ -32,6 +32,7 @@ Tao tu dong bang Word/Google Docs sau khi viet xong.
 - RLS: phan quyen khach hang/admin.
 - Docker/Docker Compose: dong goi ung dung.
 - AI tool: ho tro thiet ke, debug, kiem thu, viet tai lieu.
+- Gemini API: chatbot AI Stylist goi y set do theo catalog san pham that.
 
 ## 5. Kien truc he thong
 

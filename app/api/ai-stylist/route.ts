@@ -13,6 +13,16 @@ type StylistProduct = {
   stock: number | null;
 };
 
+type GeminiGenerateContentResponse = {
+  candidates?: Array<{
+    content?: {
+      parts?: Array<{
+        text?: string;
+      }>;
+    };
+  }>;
+};
+
 function formatCurrency(value: number) {
   return new Intl.NumberFormat("vi-VN", {
     style: "currency",
@@ -124,6 +134,83 @@ function fallbackStylistAnswer(message: string, products: StylistProduct[], orig
   ].join("\n");
 }
 
+function buildStylistPrompt(message: string, catalogContext: string) {
+  return [
+    "Bạn là AI Stylist cho website bán streetwear DOTUS.",
+    "Luôn trả lời bằng tiếng Việt có dấu, tự nhiên, ngắn gọn nhưng đủ hữu ích.",
+    "Chỉ gợi ý sản phẩm có trong catalog bên dưới, không bịa tên sản phẩm.",
+    "Nếu khách hỏi phức tạp, hãy chia câu trả lời thành: Set đề xuất, Vì sao hợp, Lưu ý size/thời tiết/ngân sách.",
+    "Nếu thiếu thông tin quan trọng như giới tính, thời tiết, dịp đi, ngân sách, hãy hỏi lại tối đa 2 câu sau khi đưa một gợi ý an toàn.",
+    "Khi gợi ý sản phẩm, ghi kèm giá và link sản phẩm.",
+    "Không hứa giao hàng, giảm giá hoặc tồn kho ngoài dữ liệu catalog.",
+    "",
+    "Catalog đang bán:",
+    catalogContext,
+    "",
+    "Câu hỏi của khách:",
+    message,
+  ].join("\n");
+}
+
+function readGeminiText(data: GeminiGenerateContentResponse) {
+  return (
+    data.candidates?.[0]?.content?.parts
+      ?.map((part) => part.text)
+      .filter(Boolean)
+      .join("") ?? ""
+  ).trim();
+}
+
+function isCompleteStylistAnswer(answer: string) {
+  const trimmed = answer.trim();
+
+  if (trimmed.length < 120 || !trimmed.includes("/product/")) {
+    return false;
+  }
+
+  if (/(\bTổng cộng|\bTổng tạm tính)\s*:\s*[\d.,]+\s*\.?$/i.test(trimmed)) {
+    return false;
+  }
+
+  return /[.!?)]$/.test(trimmed);
+}
+
+async function callGemini(
+  apiKey: string,
+  prompt: string,
+  model: string,
+) {
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-goog-api-key": apiKey,
+      },
+      body: JSON.stringify({
+        contents: [
+          {
+            role: "user",
+            parts: [{ text: prompt }],
+          },
+        ],
+        generationConfig: {
+          temperature: 0.7,
+          maxOutputTokens: 1600,
+        },
+      }),
+    },
+  );
+
+  if (!response.ok) {
+    return "";
+  }
+
+  const data = (await response.json()) as GeminiGenerateContentResponse;
+  return readGeminiText(data);
+}
+
 export async function POST(request: Request) {
   const { message } = (await request.json()) as { message?: string };
 
@@ -158,113 +245,37 @@ export async function POST(request: Request) {
     // Keep the chatbot available even if Supabase is temporarily unavailable.
   }
 
-  if (!process.env.OPENAI_API_KEY) {
-    const fallback = [
-      "Mình đang chạy chế độ gợi ý nhanh vì chưa có OPENAI_API_KEY.",
-      "Với nhu cầu của bạn, hãy ưu tiên 1 áo chính, 1 quần dễ phối, 1 đôi giày trung tính và 1 phụ kiện.",
-      "",
-      "Catalog hiện có:",
-      catalogContext,
-    ].join("\n");
+  const apiKey = process.env.GEMINI_API_KEY;
+  const provider = process.env.AI_PROVIDER ?? "gemini";
 
-    return new Response(encoder.encode(fallback), {
-      headers: {
-        "Content-Type": "text/plain; charset=utf-8",
-      },
-    });
-  }
-
-  const response = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-    },
-    body: JSON.stringify({
-      model: "gpt-4o-mini",
-      stream: true,
-      temperature: 0.7,
-      messages: [
-        {
-          role: "system",
-          content: [
-            "Bạn là AI Stylist cho website bán streetwear DOTUS.",
-            "Luôn trả lời bằng tiếng Việt có dấu, tự nhiên, ngắn gọn nhưng đủ hữu ích.",
-            "Chỉ gợi ý sản phẩm có trong catalog bên dưới, không bịa tên sản phẩm.",
-            "Nếu khách hỏi phức tạp, hãy chia câu trả lời thành: Set đề xuất, Vì sao hợp, Lưu ý size/thời tiết/ngân sách.",
-            "Nếu thiếu thông tin quan trọng như giới tính, thời tiết, dịp đi, ngân sách, hãy hỏi lại tối đa 2 câu sau khi đưa một gợi ý an toàn.",
-            "Khi gợi ý sản phẩm, ghi kèm giá và link sản phẩm.",
-            "Không hứa giao hàng, giảm giá hoặc tồn kho ngoài dữ liệu catalog.",
-            "",
-            "Catalog đang bán:",
-            catalogContext,
-          ].join("\n"),
-        },
-        {
-          role: "user",
-          content: message,
-        },
-      ],
-    }),
-  });
-
-  if (!response.ok || !response.body) {
+  if (provider !== "gemini" || !apiKey) {
     return new Response(encoder.encode(fallbackStylistAnswer(message, products, origin)), {
-      status: 200,
       headers: {
         "Content-Type": "text/plain; charset=utf-8",
       },
     });
   }
 
-  const stream = new ReadableStream({
-    async start(controller) {
-      const reader = response.body!.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
+  const prompt = buildStylistPrompt(message, catalogContext);
+  const models = [
+    process.env.GEMINI_MODEL || "gemini-2.0-flash",
+    "gemini-2.0-flash-lite",
+    "gemini-2.5-flash",
+  ];
+  let answer = "";
 
-      while (true) {
-        const { done, value } = await reader.read();
+  for (const model of Array.from(new Set(models))) {
+    answer = await callGemini(apiKey, prompt, model);
+    if (isCompleteStylistAnswer(answer)) {
+      break;
+    }
+  }
 
-        if (done) {
-          break;
-        }
+  if (!isCompleteStylistAnswer(answer)) {
+    answer = fallbackStylistAnswer(message, products, origin);
+  }
 
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() ?? "";
-
-        for (const line of lines) {
-          const trimmed = line.trim();
-
-          if (!trimmed.startsWith("data: ")) {
-            continue;
-          }
-
-          const payload = trimmed.replace(/^data: /, "");
-
-          if (payload === "[DONE]") {
-            continue;
-          }
-
-          try {
-            const json = JSON.parse(payload);
-            const content = json.choices?.[0]?.delta?.content;
-
-            if (content) {
-              controller.enqueue(encoder.encode(content));
-            }
-          } catch {
-            continue;
-          }
-        }
-      }
-
-      controller.close();
-    },
-  });
-
-  return new Response(stream, {
+  return new Response(encoder.encode(answer), {
     headers: {
       "Content-Type": "text/plain; charset=utf-8",
       "Cache-Control": "no-cache",

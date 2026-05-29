@@ -9,7 +9,7 @@ DOTUS la ung dung web full-stack ban hang thoi trang, xay dung bang Next.js App 
 - Tailwind CSS
 - Supabase Auth, Database, Row Level Security, Storage
 - Docker va Docker Compose
-- OpenAI API cho tinh nang AI stylist
+- Gemini API cho tinh nang AI stylist
 
 ## Chuc nang chinh
 
@@ -30,7 +30,9 @@ Tao file `.env.local` tu `.env.example`:
 ```env
 NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
-OPENAI_API_KEY=
+GEMINI_API_KEY=
+GEMINI_MODEL=gemini-2.0-flash
+AI_PROVIDER=gemini
 SUPABASE_DB_URL=
 QA_ADMIN_EMAIL=admin@dotus.test
 QA_ADMIN_PASSWORD=
