@@ -16,12 +16,14 @@ function toOrderActionMessage(message: string) {
   if (message.includes("INVALID_STATUS")) return "Trạng thái đơn hàng không hợp lệ.";
   if (message.includes("NOT_ALLOWED")) return "Bạn không có quyền xử lý đơn hàng này.";
   if (message.includes("ORDER_NOT_FOUND")) return "Không tìm thấy đơn hàng.";
+  if (message.includes("ORDER_NOT_CANCELLED")) return "Chỉ có thể xóa đơn đã hủy.";
   if (message.includes("INSUFFICIENT_STOCK")) {
     return "Không đủ tồn kho để mở lại đơn hàng này.";
   }
   if (
     message.includes("Could not find") ||
     message.includes("PGRST202") ||
+    message.includes("admin_delete_cancelled_order") ||
     message.includes("admin_update_order_status")
   ) {
     return "Database chưa chạy migration 009_admin_order_rpc.sql nên chưa thể xử lý đơn hàng.";
@@ -56,10 +58,25 @@ export async function updateOrderStatus(formData: FormData) {
     redirectWithOrderMessage("error", toOrderActionMessage(error.message));
   }
 
+  if (status === "cancelled") {
+    const { error: deleteError } = await supabase.rpc("admin_delete_cancelled_order", {
+      p_order_id: orderId,
+    });
+
+    if (deleteError) {
+      redirectWithOrderMessage("error", toOrderActionMessage(deleteError.message));
+    }
+  }
+
   revalidatePath("/admin/orders");
   revalidatePath("/admin");
   revalidatePath("/dashboard");
   revalidatePath("/products");
   revalidatePath("/");
-  redirectWithOrderMessage("message", "Đã cập nhật trạng thái đơn hàng.");
+  redirectWithOrderMessage(
+    "message",
+    status === "cancelled"
+      ? "Đã hủy đơn, hoàn kho nếu cần và xóa khỏi hàng đợi."
+      : "Đã cập nhật trạng thái đơn hàng.",
+  );
 }

@@ -8,7 +8,6 @@ import {
   PackageCheck,
   Phone,
   Search,
-  ShieldCheck,
   Truck,
   XCircle,
 } from "lucide-react";
@@ -91,10 +90,10 @@ const statusGuides: Record<
     panel: "border-sky-200 bg-sky-50",
   },
   cancelled: {
-    label: "Đã đóng",
-    hint: "Đơn đã hủy. Nếu mở lại cần kiểm tra tồn kho trước.",
-    actionLabel: "Mở lại chờ xử lý",
-    actionStatus: "pending",
+    label: "Sẽ xóa khỏi hàng đợi",
+    hint: "Khi hủy, hệ thống hoàn kho nếu cần rồi xóa đơn khỏi danh sách vận hành.",
+    actionLabel: "Hủy và xóa",
+    actionStatus: "cancelled",
     tone: "text-red-700",
     panel: "border-red-200 bg-red-50",
   },
@@ -219,14 +218,16 @@ export default async function AdminOrdersPage({
     if (priorityDiff !== 0) return priorityDiff;
     return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
   });
-  const selectedStatus = Object.keys(orderStatusLabels).includes(searchParams?.status ?? "")
+  const activeOrders = sortedOrders.filter((order) => order.status !== "cancelled");
+  const selectableStatuses: OrderStatus[] = ["pending", "paid", "shipped"];
+  const selectedStatus = selectableStatuses.includes(searchParams?.status as OrderStatus)
     ? (searchParams?.status as OrderStatus)
     : "all";
   const query = (searchParams?.q ?? "").trim().toLowerCase();
   const visibleOrders =
     (selectedStatus === "all"
-      ? sortedOrders
-      : sortedOrders.filter((order) => order.status === selectedStatus)
+      ? activeOrders
+      : activeOrders.filter((order) => order.status === selectedStatus)
     ).filter((order) => {
       if (!query) return true;
       const haystack = [
@@ -241,30 +242,27 @@ export default async function AdminOrdersPage({
         .toLowerCase();
       return haystack.includes(query);
     });
-  const pendingCount = sortedOrders.filter((order) => order.status === "pending").length;
-  const paidCount = sortedOrders.filter((order) => order.status === "paid").length;
-  const shippedCount = sortedOrders.filter((order) => order.status === "shipped").length;
-  const cancelledCount = sortedOrders.filter((order) => order.status === "cancelled").length;
-  const actionableOrders = sortedOrders.filter((order) => order.status === "pending" || order.status === "paid");
-  const confirmedRevenue = sortedOrders
+  const pendingCount = activeOrders.filter((order) => order.status === "pending").length;
+  const paidCount = activeOrders.filter((order) => order.status === "paid").length;
+  const shippedCount = activeOrders.filter((order) => order.status === "shipped").length;
+  const actionableOrders = activeOrders.filter((order) => order.status === "pending" || order.status === "paid");
+  const confirmedRevenue = activeOrders
     .filter((order) => order.status === "paid" || order.status === "shipped")
     .reduce((total, order) => total + order.total_amount, 0);
-  const pendingRevenue = sortedOrders
+  const pendingRevenue = activeOrders
     .filter((order) => order.status === "pending")
     .reduce((total, order) => total + order.total_amount, 0);
   const filterItems = [
-    { href: "/admin/orders", label: "Tất cả", count: sortedOrders.length, active: selectedStatus === "all" },
-    ...Object.entries(orderStatusLabels).map(([value, label]) => ({
+    { href: "/admin/orders", label: "Tất cả", count: activeOrders.length, active: selectedStatus === "all" },
+    ...selectableStatuses.map((value) => ({
       href: `/admin/orders?status=${value}${query ? `&q=${encodeURIComponent(query)}` : ""}`,
-      label,
+      label: orderStatusLabels[value],
       count:
         value === "pending"
           ? pendingCount
           : value === "paid"
             ? paidCount
-            : value === "shipped"
-              ? shippedCount
-              : cancelledCount,
+            : shippedCount,
       active: selectedStatus === value,
     })),
   ];
@@ -273,18 +271,18 @@ export default async function AdminOrdersPage({
     <main className="bg-neutral-50 px-4 py-6 sm:px-6 lg:px-8">
       <section className="mx-auto max-w-7xl space-y-6">
         <div className="overflow-hidden rounded-2xl border border-neutral-200 bg-neutral-950 text-white shadow-sm">
-          <div className="grid gap-6 p-6 lg:grid-cols-[minmax(0,1fr)_420px] lg:p-8">
+          <div className="p-6 lg:p-8">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.22em] text-orange-300">
                 DOTUS fulfillment
               </p>
-              <h2 className="mt-3 text-3xl font-semibold tracking-tight">
+              <h2 className="mt-3 max-w-3xl text-3xl font-semibold tracking-tight">
                 Trung tâm xử lý đơn hàng
               </h2>
               <p className="mt-3 max-w-2xl text-sm leading-6 text-white/70">
-                Ưu tiên xác nhận đơn mới, chuẩn bị đơn đã xác nhận và theo dõi đơn đang giao. Tồn kho chỉ thay đổi khi trạng thái đi vào hoặc rời khỏi nhóm đã xác nhận.
+                Tập trung vào các đơn còn cần vận hành. Đơn bị hủy sẽ hoàn kho nếu cần và được xóa khỏi hàng đợi để admin không phải xử lý lại rác dữ liệu.
               </p>
-              <div className="mt-6 grid gap-3 sm:grid-cols-3">
+              <div className="mt-6 grid gap-3 sm:grid-cols-3 lg:max-w-4xl">
                 {[
                   { label: "Cần thao tác", value: actionableOrders.length, note: "chờ xác nhận/giao" },
                   { label: "Giá trị chờ", value: currencyFormatter.format(pendingRevenue), note: "chưa trừ tồn kho" },
@@ -296,26 +294,6 @@ export default async function AdminOrdersPage({
                     <p className="mt-1 text-xs text-white/50">{item.note}</p>
                   </div>
                 ))}
-              </div>
-            </div>
-            <div className="rounded-xl border border-white/10 bg-white/10 p-4">
-              <div className="flex items-center gap-2">
-                <ShieldCheck className="h-5 w-5 text-emerald-300" />
-                <p className="font-semibold">Luồng xử lý đã cấu hình</p>
-              </div>
-              <div className="mt-4 space-y-3 text-sm text-white/72">
-                <div className="flex gap-3">
-                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-amber-400 text-xs font-bold text-neutral-950">1</span>
-                  <p>Khách đặt đơn, hệ thống tạo trạng thái Chờ xử lý và giữ nguyên tồn kho.</p>
-                </div>
-                <div className="flex gap-3">
-                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-400 text-xs font-bold text-neutral-950">2</span>
-                  <p>Admin xác nhận thanh toán/COD, hệ thống trừ tồn kho đúng số lượng.</p>
-                </div>
-                <div className="flex gap-3">
-                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-sky-400 text-xs font-bold text-neutral-950">3</span>
-                  <p>Nếu hủy sau xác nhận, hệ thống hoàn lại tồn kho để tránh thất thoát.</p>
-                </div>
               </div>
             </div>
           </div>
@@ -378,7 +356,7 @@ export default async function AdminOrdersPage({
             { label: "Chờ xử lý", value: pendingCount, icon: Clock3, color: "text-amber-600", href: "/admin/orders?status=pending" },
             { label: "Đã xác nhận", value: paidCount, icon: CheckCircle2, color: "text-emerald-600", href: "/admin/orders?status=paid" },
             { label: "Đang giao", value: shippedCount, icon: Truck, color: "text-sky-600", href: "/admin/orders?status=shipped" },
-            { label: "Đã hủy", value: cancelledCount, icon: XCircle, color: "text-red-600", href: "/admin/orders?status=cancelled" },
+            { label: "Cần thao tác", value: actionableOrders.length, icon: PackageCheck, color: "text-orange-600", href: "/admin/orders" },
           ].map((item) => (
             <Link key={item.label} href={item.href} className="rounded-xl border border-neutral-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-orange-200 hover:shadow-md">
               <div className="flex items-center justify-between">
@@ -399,19 +377,14 @@ export default async function AdminOrdersPage({
                 <PackageCheck className="h-5 w-5 text-orange-500" />
                 Hàng đợi vận hành
               </CardTitle>
-              <p className="text-sm text-neutral-500">Sắp xếp theo việc cần làm trước</p>
+              <p className="text-sm text-neutral-500">Chỉ hiển thị đơn còn cần xử lý</p>
             </div>
           </CardHeader>
-          <CardContent className="grid gap-3 md:grid-cols-4">
+          <CardContent className="grid gap-3 md:grid-cols-3">
             {[
               { status: "pending" as OrderStatus, count: pendingCount, hint: "Cần xác nhận sớm" },
               { status: "paid" as OrderStatus, count: paidCount, hint: "Sẵn sàng đóng gói" },
               { status: "shipped" as OrderStatus, count: shippedCount, hint: "Theo dõi giao hàng" },
-              {
-                status: "cancelled" as OrderStatus,
-                count: cancelledCount,
-                hint: "Cần xem lý do",
-              },
             ].map((item) => {
               const Icon = statusIcons[item.status];
               return (
@@ -563,7 +536,7 @@ export default async function AdminOrdersPage({
                       >
                         {Object.entries(orderStatusLabels).map(([value, label]) => (
                           <option key={value} value={value}>
-                            {label}
+                            {value === "cancelled" ? "Hủy và xóa khỏi hàng đợi" : label}
                           </option>
                         ))}
                       </select>
