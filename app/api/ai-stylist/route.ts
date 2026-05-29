@@ -44,6 +44,10 @@ function productLink(product: StylistProduct, origin: string) {
 function detectIntent(message: string) {
   const lower = message.toLowerCase();
 
+  if (/^(hi|hello|hey|chào|chao|xin chào|alo|ê|e|bạn ơi|ban oi)[\s!.?]*$/i.test(lower.trim())) {
+    return "greeting";
+  }
+
   if (/(phối|set|outfit|mặc gì|đi học|đi chơi|đà lạt|cafe|hẹn hò|du lịch)/i.test(lower)) {
     return "styling";
   }
@@ -219,6 +223,14 @@ function fallbackStylistAnswer(message: string, products: StylistProduct[], orig
   const lower = message.toLowerCase();
   const intent = detectIntent(message);
 
+  if (intent === "greeting") {
+    return [
+      "Chào bạn, mình là DOTUS Stylist.",
+      "Mình có thể giúp bạn phối đồ theo ngân sách, tư vấn size, hướng dẫn đặt hàng hoặc tra cứu đơn.",
+      "Bạn muốn mình tư vấn outfit cho dịp nào hôm nay?",
+    ].join("\n");
+  }
+
   if (intent === "order") {
     return [
       "Bạn kiểm tra đơn theo 2 cách:",
@@ -385,7 +397,7 @@ function isCompleteAnswer(answer: string, intent: string) {
     return false;
   }
 
-  if ((intent === "styling" || intent === "general") && !trimmed.includes("/product/")) {
+  if (intent === "styling" && !trimmed.includes("/product/")) {
     return false;
   }
 
