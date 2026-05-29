@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { usePathname } from "next/navigation";
+import { Facebook } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/client";
@@ -41,13 +42,14 @@ export function SocialAuthButtons() {
       <Button
         type="button"
         variant="outline"
-        className="w-full"
+        className="h-12 w-full rounded-xl border-neutral-200 bg-white text-base font-semibold hover:bg-neutral-50"
         onClick={handleFacebookSignIn}
         disabled={loading}
       >
+        <Facebook className="mr-2 h-4 w-4" />
         {loading ? "Đang chuyển hướng..." : "Đăng nhập bằng Facebook"}
       </Button>
-      {error ? <p className="text-sm text-red-600 dark:text-red-400">{error}</p> : null}
+      {error ? <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p> : null}
     </div>
   );
 }
